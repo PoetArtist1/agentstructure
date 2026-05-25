@@ -1,0 +1,5 @@
+# Gitignore raíz
+walkthrough.md
+node_modules/
+.env
+config.json
