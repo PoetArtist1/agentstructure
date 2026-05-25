@@ -1,0 +1,11 @@
+{
+  "_comentario": "Registro de agentes autorizados. Cada agente tiene su propio secret único. El clienteId es la clave del objeto. IMPORTANTE: Copia este archivo como 'agents.json' y personaliza los secrets antes de iniciar el servidor. El archivo 'agents.json' está en .gitignore para no subir credenciales al repositorio.",
+  "empresa_ejemplo": {
+    "secret": "generar-un-secret-unico-aqui",
+    "description": "Nombre descriptivo de la empresa o sucursal"
+  },
+  "sucursal_norte": {
+    "secret": "otro-secret-totalmente-diferente",
+    "description": "Sucursal Norte - Distribuidora Ejemplo"
+  }
+}

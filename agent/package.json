@@ -1,0 +1,17 @@
+{
+  "name": "gdata-tunnel-agent",
+  "version": "2.0.0",
+  "description": "Agente on-premise v2: resuelve queries localmente, soporta múltiples motores de BD, modo solo-lectura, y auditoría de accesos.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.1",
+    "mssql": "^11.0.1",
+    "pg": "^8.13.1",
+    "mysql2": "^3.11.5",
+    "dotenv": "^16.4.7"
+  }
+}

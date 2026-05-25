@@ -1,0 +1,31 @@
+{
+  "_comentario": "Configuración del agente. Copia este archivo como 'config.json' y personaliza los valores.",
+
+  "clienteId": "empresa_ejemplo",
+  "serverUrl": "wss://mi-servidor.com/ws",
+  "agentSecret": "el-secret-unico-de-este-agente",
+
+  "readOnly": true,
+
+  "reconnect": {
+    "initialDelayMs": 1000,
+    "maxDelayMs": 30000,
+    "backoffMultiplier": 2
+  },
+
+  "dbEngine": "mssql",
+
+  "db": {
+    "server": "localhost",
+    "port": 1433,
+    "database": "MiBaseDeDatos",
+    "user": "sa",
+    "password": "MiPasswordSeguro123",
+    "options": {
+      "encrypt": false,
+      "trustServerCertificate": true,
+      "requestTimeout": 30000,
+      "connectionTimeout": 15000
+    }
+  }
+}

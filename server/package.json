@@ -1,0 +1,19 @@
+{
+  "name": "gdata-tunnel-server",
+  "version": "2.0.0",
+  "description": "Servidor central del túnel inverso v2: API REST + WebSocket hub. Los queries se definen en el agente, no en el servidor.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0",
+    "node-cache": "^5.1.2",
+    "uuid": "^11.1.0",
+    "ws": "^8.18.1"
+  }
+}

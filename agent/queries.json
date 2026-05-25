@@ -1,0 +1,41 @@
+{
+  "_comentario": "LISTA BLANCA de queries permitidas del lado del agente. Solo las acciones definidas aquí pueden ejecutarse. Cada acción define: description (documentación), sql (la consulta), y params (parámetros con tipo y si son requeridos). Los tipos soportados son: int, string, float, decimal, boolean, date, datetime. Usa @NombreParametro en el SQL para parámetros seguros (previenen SQL Injection).",
+
+  "get_cuentas_cobrar_by_client": {
+    "description": "Obtiene cuentas por cobrar de un cliente específico, filtrando solo las que tienen saldo pendiente mayor a 0.01",
+    "sql": "SELECT IdCliente as IDCliente, Id as IDDocumento, IdVendedor as IDVendedor, NroDocumt as nro_documento, Tipo as tipo_documento, SaldoAct as saldo_pendiente, AutoIncrField as auto_increment, Factor as tasa_cambio, FORMAT(FEmision, 'dd/MM/yyyy') as emision, FORMAT(FVenc, 'dd/MM/yyyy') as vence FROM CtsxCobrar WHERE IdCliente = @IdCliente AND SaldoAct > 0.01",
+    "params": {
+      "IdCliente": { "type": "string", "required": true }
+    }
+  },
+
+  "get_bancos": {
+    "description": "Obtiene todos los bancos registrados en el sistema con su moneda asociada",
+    "sql": "SELECT idbanco as IDBanco, Descripcion as banco, id_moneda as IDMoneda FROM fBancos",
+    "params": {}
+  },
+
+  "get_clientes": {
+    "description": "Obtiene la lista completa de clientes con toda su información comercial: datos fiscales, crédito, contacto y última actividad",
+    "sql": "SELECT Codigo as IDCliente, Descripcion as razon_social, Direccion1 as direccion, Telefonos as telefono, IdVendedor as IDVendedor, TipoPrecio as tipo_precio, Rif as rif, PermiteCredito as tiene_credito, LimiteCredito as limite_credito, DiasCredito as dias_credito, Contact as contacto, Email as email, Descto as descuento, NumeroUV as nro_ultimo_venta, FORMAT(FechaUV, 'dd/MM/yyyy') as fecha_ultima, NumeroUP as nro_ultimo_pago, FORMAT(FechaUP, 'dd/MM/yyyy') as fecha_ultimo_pago FROM Clientes",
+    "params": {}
+  },
+
+  "get_productos": {
+    "description": "Obtiene el catálogo completo de productos con todos los niveles de precio, impuestos y datos de referencia",
+    "sql": "SELECT Codigo as IDProducto, Departamento as IDDepartamento, Descripcion1 as Descripcion, Precio_Maximo as precio_maximo, Precio_Minimo as precio_minimo, Precio_Mayor as precio_mayor, Precio_Detal as precio_detal, Precio_Oferta as precio_oferta, Exento as EsExento, Impuesto as tasa_iva, Refere as referencia, Marca as marca, Modelo as modelo, FORMAT(FechaUV, 'dd/MM/yyyy') as fecha_ult_venta, IDMoneda as IDMoneda FROM INVENTARIO",
+    "params": {}
+  },
+
+  "get_empresa": {
+    "description": "Obtiene los datos de configuración de la empresa: razón social, dirección fiscal, RIF, teléfono y email",
+    "sql": "SELECT NombreEmpresa as razon_social, Direccion1 as direccion_fiscal, Fiscal1 as rif, Telefonos as telefono_empresa, EMail as email_principal FROM Configuracion",
+    "params": {}
+  },
+
+  "get_monedas": {
+    "description": "Obtiene todas las monedas configuradas en el sistema con su símbolo y tasa de cambio actual",
+    "sql": "SELECT Codigo as IDMoneda, Descripcion as nombre_moneda, Simbol as simbolo_moneda, ParaVenta as tasa_cambio FROM Monedas",
+    "params": {}
+  }
+}
