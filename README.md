@@ -1,7 +1,6 @@
 # 🛡️ AgentStructure
 
 [![Node.js Version](https://img.shields.io/badge/Node.js-v18+-green?style=flat-for-the-badge&logo=node.js)](https://nodejs.org)
-[![Licencia](https://img.shields.io/badge/Licencia-MIT-blue?style=flat-for-the-badge)](LICENSE)
 
 **Soberanía de Datos y Conectividad Segura para Entornos On-Premise.**
 
@@ -133,9 +132,3 @@ El instalador te permitirá elegir el componente a configurar:
   motor de base de datos a utilizar (PostgreSQL, MySQL o SQL Server) y sus
   credenciales de conexión local.
 
----
-
-## 📄 Licencia
-
-Este proyecto está bajo la Licencia MIT. Para más detalles, consulta el archivo
-de licencia correspondiente.
