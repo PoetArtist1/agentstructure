@@ -102,7 +102,8 @@ sequenceDiagram
   Código del Servidor central que actúa como API Gateway y maneja las conexiones
   WebSocket de múltiples agentes.
 - [`/landing`](file:///c:/Users/carlo/OneDrive/Escritorio/TRABAJO/agentstructure/landing):
-  Landing page interactiva construida en **React + Vite** para la presentación del proyecto.
+  Landing page interactiva construida en **React + Vite** para la presentación
+  del proyecto.
 - [`install.js`](file:///c:/Users/carlo/OneDrive/Escritorio/TRABAJO/agentstructure/install.js):
   Script de configuración inicial automatizado para el entorno.
 
@@ -131,4 +132,3 @@ El instalador te permitirá elegir el componente a configurar:
 - **Si eliges Agente:** Solicitará el ID asignado, el Secreto de conexión, el
   motor de base de datos a utilizar (PostgreSQL, MySQL o SQL Server) y sus
   credenciales de conexión local.
-

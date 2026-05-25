@@ -3,3 +3,4 @@ walkthrough.md
 node_modules/
 .env
 config.json
+windows-installer/

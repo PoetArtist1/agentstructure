@@ -59,6 +59,86 @@
 
 .install__cta { text-align: center; }
 
+.install__tabs {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-bottom: 3rem;
+  flex-wrap: wrap;
+}
+
+.install__tab-btn {
+  background: var(--bg-secondary, rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--border-card, rgba(255, 255, 255, 0.08));
+  color: var(--text-secondary, #9ca3af);
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--radius-sm, 6px);
+  font-family: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.25s ease;
+}
+
+.install__tab-btn:hover {
+  border-color: var(--accent-cyan, #06b6d4);
+  color: var(--text-primary, #ffffff);
+}
+
+.install__tab-btn.active {
+  background: var(--gradient-btn, linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%));
+  color: #0d1117;
+  border-color: transparent;
+  box-shadow: 0 0 16px rgba(6, 182, 212, 0.25);
+}
+
+.gui-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.5rem;
+  max-width: 950px;
+  margin: 0 auto 2rem;
+}
+
+.gui-feature-card {
+  background: var(--bg-secondary, rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--border-card, rgba(255, 255, 255, 0.08));
+  border-radius: var(--radius-md, 12px);
+  padding: 2rem 1.5rem;
+  text-align: center;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(12px);
+}
+
+.gui-feature-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--accent-cyan, #06b6d4);
+  box-shadow: 0 8px 24px rgba(6, 182, 212, 0.1);
+}
+
+.gui-feature-icon {
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+  display: block;
+}
+
+.gui-feature-card h4 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary, #ffffff);
+}
+
+.gui-feature-card p {
+  font-size: 0.875rem;
+  color: var(--text-secondary, #9ca3af);
+  line-height: 1.5;
+}
+
 @media (max-width: 480px) {
   .install-step { flex-direction: column; align-items: center; text-align: center; }
+  .install__tab-btn { width: 100%; justify-content: center; }
 }
