@@ -55,18 +55,19 @@ sequenceDiagram
     Note over App, Server: 2. Solicitud de Datos externa
     App->>Server: POST /query/empresa_abc header{x-api-key:example-key} body{ action: "obtener_ventas", params: { anio: 2026 } } 
     
-    Note over Server, Agent: 3. Delegación de la Consulta
-    Server->>Agent: Transmite acción "obtener_ventas" + params
-    
-    Note over Agent, DB: 4. Resolución Local
-    Agent->>Agent: Valida tipos de parámetros & busca query SQL en queries.json
-    Agent->>DB: Ejecuta SELECT ... WHERE anio = 2026
-    DB-->>Agent: Devuelve set de datos
-    Agent->>Agent: Registra acceso en log de auditoría local
-    
-    Note over Agent, App: 5. Respuesta segura
-    Agent-->>Server: Envía JSON de respuesta por WebSocket
-    Server-->>App: Responde 200 OK con los datos
+    Note over Server: 3. Chequeo de Caché (CACHE_DEFAULT_TTL > 0)
+    alt Cache HIT (Datos en memoria)
+        Server-->>App: Responde 200 OK con datos de caché (Latencia < 5ms)
+    else Cache MISS (Consultar al Agente)
+        Server->>Agent: Transmite acción "obtener_ventas" + params
+        Agent->>Agent: Valida tipos de parámetros & busca query SQL en queries.json
+        Agent->>DB: Ejecuta SELECT ... WHERE anio = 2026
+        DB-->>Agent: Devuelve set de datos
+        Agent->>Agent: Registra acceso en log de auditoría local
+        Agent-->>Server: Envía JSON de respuesta por WebSocket
+        Server->>Server: Almacena en caché (node-cache)
+        Server-->>App: Responde 200 OK con los datos
+    end
 ```
 
 ---
@@ -91,6 +92,8 @@ sequenceDiagram
   - **Microsoft SQL Server (MSSQL)**
 - 💻 **Instalador Interactivo:** Un asistente por consola rápido que guía la
   inicialización de ambos roles.
+- ⚡ **Caché en Memoria (Opcional):** Almacenamiento temporal integrado (`node-cache`) en el Servidor Central que previene la sobrecarga de consultas en el Agente y disminuye drásticamente la latencia en peticiones repetitivas.
+
 
 ---
 
@@ -149,6 +152,10 @@ API_KEY=mi-clave-de-api-super-segura-cambiar-en-produccion
 
 # Tiempo máximo (en milisegundos) a esperar por la respuesta del agente antes de retornar un 504 Gateway Timeout
 QUERY_TIMEOUT_MS=30000
+
+# Tiempo de vida en segundos de la caché en memoria (0 o vacío para desactivar)
+CACHE_DEFAULT_TTL=60
+
 ```
 
 #### 2. Registro de Agentes Autorizados: `server/agents.json`
@@ -261,3 +268,14 @@ npm install
 npm start
 ```
 *(El agente establecerá la conexión inversa por WebSocket con el servidor y quedará a la espera de consultas).*
+
+---
+
+## ⚡ Caché en Memoria y Rendimiento
+
+El Servidor Central incorpora una capa de almacenamiento en memoria (`node-cache`) que reduce la latencia de red y evita la sobrecarga transaccional de tus servidores On-Premise:
+
+*   **Activación:** Se controla a nivel global con la variable `CACHE_DEFAULT_TTL` (en segundos) en el archivo `server/.env`.
+*   **Comportamiento:** Si llega una solicitud HTTP idéntica (mismo `clienteId`, misma acción y mismos parámetros), el Servidor Central devuelve el resultado directamente desde su memoria RAM (*Cache HIT*) sin enviar mensajes por WebSocket al agente ni consultar la base de datos local.
+*   **Limpieza de memoria:** Transcurrido el tiempo asignado en el TTL, la entrada en caché expira y se elimina automáticamente, forzando a que la siguiente consulta busque datos actualizados directamente del agente.
+
