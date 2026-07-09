@@ -10,6 +10,8 @@
  *    inmediato en vez de esperar el timeout de 30 segundos.
  *  • La caché sigue funcionando igual (usa clienteId + action + params como llave).
  *  • La autenticación por API Key se aplica en el middleware (apiKey.js).
+ *  • SINGLEFLIGHT: Si múltiples peticiones piden los mismos datos al mismo tiempo,
+ *    solo la primera va al agente. Las demás esperan ese mismo resultado.
  *
  * ENDPOINTS:
  *   POST /query/:clienteId  → Body: { action: "get_clientes", params: {} }
@@ -28,6 +30,26 @@ const QUERY_TIMEOUT_MS = parseInt(process.env.QUERY_TIMEOUT_MS, 10) || 30_000;
 
 // TTL de caché configurable (default: 0 = sin caché)
 const CACHE_TTL = parseInt(process.env.CACHE_DEFAULT_TTL, 10) || 0;
+
+// ─── Singleflight: Mapa de peticiones en vuelo ──────────────────────────────
+// Evita el problema "thundering herd" (estampida de caché):
+// Si 100 hilos piden get_bancos a la vez, solo 1 va al agente.
+// Los otros 99 esperan la misma promesa y comparten el resultado.
+// Clave: misma que la caché (clienteId::action::params)
+const inflight = new Map();
+
+/**
+ * Genera la misma llave que usa cache.js para identificar una petición.
+ */
+function buildCacheKey(clienteId, action, params) {
+  const sortedParams = params && Object.keys(params).length > 0
+    ? JSON.stringify(Object.keys(params).sort().reduce((acc, k) => {
+        acc[k] = params[k];
+        return acc;
+      }, {}))
+    : '{}';
+  return `${clienteId}::${action}::${sortedParams}`;
+}
 
 // ─── POST /query/:clienteId ──────────────────────────────────────────────────
 /**
@@ -75,6 +97,8 @@ router.post('/query/:clienteId', async (req, res) => {
 
   // 4. REVISAR CACHÉ: Si hay un resultado cacheado para esta combinación
   //    exacta de clienteId + action + params, lo devolvemos al instante.
+  const cacheKey = buildCacheKey(clienteId, action, receivedParams);
+
   if (CACHE_TTL > 0) {
     const cached = appCache.get(clienteId, action, receivedParams);
     if (cached !== undefined) {
@@ -83,10 +107,22 @@ router.post('/query/:clienteId', async (req, res) => {
     }
   }
 
-  try {
-    // 5. Crear la correlación y enviar al agente
-    //    IMPORTANTE: Ya NO enviamos SQL. Solo el nombre de la acción y los parámetros.
-    //    El agente tiene su propio queries.json donde resolverá el SQL.
+  // 5. SINGLEFLIGHT: Si ya hay una petición en vuelo para esta misma llave,
+  //    no enviamos otra query al agente. Simplemente esperamos el resultado
+  //    de la primera petición y lo compartimos.
+  if (inflight.has(cacheKey)) {
+    console.log(`[API] Singleflight JOIN → ${clienteId}::${action}`);
+    try {
+      const data = await inflight.get(cacheKey);
+      return res.json({ ok: true, fromCache: true, data });
+    } catch (err) {
+      return res.status(504).json({ ok: false, error: err.message });
+    }
+  }
+
+  // 6. Somos la PRIMERA petición para esta llave. Creamos la promesa
+  //    que todos los demás hilos van a esperar.
+  const flightPromise = (async () => {
     const { correlationId, promise } = registry.createPending(QUERY_TIMEOUT_MS);
 
     ws.send(JSON.stringify({
@@ -96,16 +132,30 @@ router.post('/query/:clienteId', async (req, res) => {
       params: receivedParams, // Parámetros enviados por la App
     }));
 
-    // 6. Esperar la respuesta del agente (o el timeout)
+    // Esperar la respuesta del agente (o el timeout)
     const data = await promise;
 
-    // 7. GUARDAR EN CACHÉ: Si el TTL está configurado, guardamos la respuesta
+    // GUARDAR EN CACHÉ: Si el TTL está configurado, guardamos la respuesta
     if (CACHE_TTL > 0) {
       appCache.set(clienteId, action, receivedParams, data, CACHE_TTL);
       console.log(`[API] Cache SET → ${clienteId}::${action} (TTL: ${CACHE_TTL}s)`);
     }
 
-    // Respondemos con los datos del agente
+    return data;
+  })();
+
+  // Registramos la promesa en el mapa de vuelos activos
+  inflight.set(cacheKey, flightPromise);
+
+  // Cuando la promesa termine (éxito o error), la removemos del mapa
+  flightPromise
+    .catch(() => {}) // Evitar unhandled rejection del .finally
+    .finally(() => {
+      inflight.delete(cacheKey);
+    });
+
+  try {
+    const data = await flightPromise;
     return res.json({ ok: true, fromCache: false, data });
   } catch (err) {
     return res.status(504).json({ ok: false, error: err.message });
