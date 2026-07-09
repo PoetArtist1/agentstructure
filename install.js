@@ -13,6 +13,7 @@
  *   node install.js
  *
  * FLUJO:
+ * 
  *   1. Pregunta: ¿Instalar Agente o Servidor?
  *   2. Solicita los datos de configuración necesarios
  *   3. Genera los archivos de configuración (.env, agents.json, config.json)
