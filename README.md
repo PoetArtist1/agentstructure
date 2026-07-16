@@ -78,31 +78,28 @@ sequenceDiagram
 
 ```mermaid
 graph TD
-    SCE["🖥️ Sistema Consumidor\nExterno"]
-    SRV["☁️ Servidor Central\n(API Gateway)"]
-    AGT["🔌 Agente Local\nOn-Premise"]
-    DB["🗄️ Base de Datos\nRelacional"]
+    SCE["🖥️ Sistema Consumidor Externo"]
+    DB["🗄️ Base de Datos Relacional"]
 
-    subgraph CU_SERVER ["Servidor Central"]
+    subgraph CU_SERVER ["☁️ Servidor Central - API Gateway"]
         UC1["Autenticar App consumidora\nmediante API Key"]
-        UC2["Verificar credenciales\ndel Agente (agents.json)"]
+        UC2["Verificar credenciales\ndel Agente en agents.json"]
         UC3["Registrar Action Manifest"]
         UC4["Solicitar extracción\nde información"]
         UC5["Gestionar caché\nde respuestas"]
     end
 
-    subgraph CU_AGENT ["Agente On-Premise"]
+    subgraph CU_AGENT ["🔌 Agente Local On-Premise"]
         UC6["Establecer túnel\nWebSocket inverso"]
-        UC7["Resolver consulta\nlocal (queries.json)"]
+        UC7["Resolver consulta\nlocal en queries.json"]
         UC8["Ejecutar SELECT\nlocal"]
-        UC9["Registrar log de\naudit local"]
+        UC9["Registrar log de\nauditoria local"]
     end
 
     SCE -->|"POST /query/:clienteId\n+ X-Api-Key"| UC1
     UC1 -->|"incluye"| UC4
     UC4 -->|"incluye"| UC5
 
-    AGT -->|"ws:// + clienteId + secret"| UC6
     UC6 -->|"incluye"| UC2
     UC6 -->|"incluye"| UC3
 
@@ -112,9 +109,9 @@ graph TD
     UC8 -->|"incluye"| UC9
 
     style SCE fill:#1e40af,color:#fff,stroke:#1e3a8a
-    style SRV fill:#065f46,color:#fff,stroke:#064e3b
-    style AGT fill:#7c2d12,color:#fff,stroke:#6b1d0f
     style DB fill:#4a044e,color:#fff,stroke:#3b0764
+    style CU_SERVER fill:#0a2e1a,color:#fff,stroke:#065f46
+    style CU_AGENT fill:#2a1008,color:#fff,stroke:#7c2d12
 ```
 
 ---
@@ -123,7 +120,7 @@ graph TD
 
 ```mermaid
 graph TB
-    subgraph INTERNET ["🌐 Internet (Bridge de Docker)"]
+    subgraph INTERNET ["🌐 Internet - Bridge de Docker"]
         direction TB
         INT["Adaptador Bridge\nDocker"]
     end
@@ -133,22 +130,20 @@ graph TB
         SRV_C["📦 Contenedor\nServidor Central\n172.20.0.2\nPuerto 3500 expuesto\nHTTP / WebSocket"]
     end
 
-    subgraph ONPREMISE ["🏢 Red private-lan — 10.50.0.0/24 (Perímetro Aislado)"]
+    subgraph ONPREMISE ["🏢 Red private-lan — 10.50.0.0/24 — Perimetro Aislado"]
         direction TB
-        AGT_C["📦 Contenedor\nAgente Local\n10.50.0.5\n❌ Sin puertos entrantes"]
+        AGT_C["📦 Contenedor\nAgente Local\n10.50.0.5\nSin puertos entrantes"]
         MSSQL["📦 SQL Server\n10.50.0.10:1433"]
         PG["📦 PostgreSQL\n10.50.0.11:5432"]
         MYSQL["📦 MySQL\n10.50.0.12:3306"]
     end
 
     SRV_C <-->|"Puerto 3500 expuesto\nal exterior"| INT
-    AGT_C -->|"Egress únicamente\n✅ Tráfico WebSocket SALIENTE\nwss://servidor:3500/ws"| INT
+    AGT_C -->|"Egress unicamente\nTrafico WebSocket SALIENTE\nwss://servidor:3500/ws"| INT
 
     AGT_C <-->|"Red interna privada"| MSSQL
     AGT_C <-->|"Red interna privada"| PG
     AGT_C <-->|"Red interna privada"| MYSQL
-
-    note1["❌ NO existen puertos\nIncoming (Ingress)\ndesde Internet hacia\nla red private-lan"]
 
     style CLOUD fill:#0c2d48,stroke:#1e4d6b,color:#fff
     style ONPREMISE fill:#1a0a0a,stroke:#5c1a1a,color:#fff
@@ -158,7 +153,6 @@ graph TB
     style MSSQL fill:#312e81,color:#fff,stroke:#1e1b4b
     style PG fill:#1e3a5f,color:#fff,stroke:#1e40af
     style MYSQL fill:#14532d,color:#fff,stroke:#166534
-    style note1 fill:#450a0a,color:#fca5a5,stroke:#7f1d1d
 ```
 
 ---
