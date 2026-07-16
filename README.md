@@ -72,6 +72,187 @@ sequenceDiagram
 
 ---
 
+## 📐 Diagramas de Arquitectura
+
+### 1. Diagrama de Casos de Uso
+
+```mermaid
+graph TD
+    SCE["🖥️ Sistema Consumidor\nExterno"]
+    SRV["☁️ Servidor Central\n(API Gateway)"]
+    AGT["🔌 Agente Local\nOn-Premise"]
+    DB["🗄️ Base de Datos\nRelacional"]
+
+    subgraph CU_SERVER ["Servidor Central"]
+        UC1["Autenticar App consumidora\nmediante API Key"]
+        UC2["Verificar credenciales\ndel Agente (agents.json)"]
+        UC3["Registrar Action Manifest"]
+        UC4["Solicitar extracción\nde información"]
+        UC5["Gestionar caché\nde respuestas"]
+    end
+
+    subgraph CU_AGENT ["Agente On-Premise"]
+        UC6["Establecer túnel\nWebSocket inverso"]
+        UC7["Resolver consulta\nlocal (queries.json)"]
+        UC8["Ejecutar SELECT\nlocal"]
+        UC9["Registrar log de\naudit local"]
+    end
+
+    SCE -->|"POST /query/:clienteId\n+ X-Api-Key"| UC1
+    UC1 -->|"incluye"| UC4
+    UC4 -->|"incluye"| UC5
+
+    AGT -->|"ws:// + clienteId + secret"| UC6
+    UC6 -->|"incluye"| UC2
+    UC6 -->|"incluye"| UC3
+
+    UC4 -->|"type: query\n+ correlationId"| UC7
+    UC7 -->|"incluye"| UC8
+    UC8 -->|"driver SQL"| DB
+    UC8 -->|"incluye"| UC9
+
+    style SCE fill:#1e40af,color:#fff,stroke:#1e3a8a
+    style SRV fill:#065f46,color:#fff,stroke:#064e3b
+    style AGT fill:#7c2d12,color:#fff,stroke:#6b1d0f
+    style DB fill:#4a044e,color:#fff,stroke:#3b0764
+```
+
+---
+
+### 2. Topología de Red Virtualizada (Docker)
+
+```mermaid
+graph TB
+    subgraph INTERNET ["🌐 Internet (Bridge de Docker)"]
+        direction TB
+        INT["Adaptador Bridge\nDocker"]
+    end
+
+    subgraph CLOUD ["☁️ Red cloud-net — 172.20.0.0/24"]
+        direction TB
+        SRV_C["📦 Contenedor\nServidor Central\n172.20.0.2\nPuerto 3500 expuesto\nHTTP / WebSocket"]
+    end
+
+    subgraph ONPREMISE ["🏢 Red private-lan — 10.50.0.0/24 (Perímetro Aislado)"]
+        direction TB
+        AGT_C["📦 Contenedor\nAgente Local\n10.50.0.5\n❌ Sin puertos entrantes"]
+        MSSQL["📦 SQL Server\n10.50.0.10:1433"]
+        PG["📦 PostgreSQL\n10.50.0.11:5432"]
+        MYSQL["📦 MySQL\n10.50.0.12:3306"]
+    end
+
+    SRV_C <-->|"Puerto 3500 expuesto\nal exterior"| INT
+    AGT_C -->|"Egress únicamente\n✅ Tráfico WebSocket SALIENTE\nwss://servidor:3500/ws"| INT
+
+    AGT_C <-->|"Red interna privada"| MSSQL
+    AGT_C <-->|"Red interna privada"| PG
+    AGT_C <-->|"Red interna privada"| MYSQL
+
+    note1["❌ NO existen puertos\nIncoming (Ingress)\ndesde Internet hacia\nla red private-lan"]
+
+    style CLOUD fill:#0c2d48,stroke:#1e4d6b,color:#fff
+    style ONPREMISE fill:#1a0a0a,stroke:#5c1a1a,color:#fff
+    style INTERNET fill:#1a1a2e,stroke:#16213e,color:#fff
+    style SRV_C fill:#065f46,color:#fff,stroke:#064e3b
+    style AGT_C fill:#7c2d12,color:#fff,stroke:#6b1d0f
+    style MSSQL fill:#312e81,color:#fff,stroke:#1e1b4b
+    style PG fill:#1e3a5f,color:#fff,stroke:#1e40af
+    style MYSQL fill:#14532d,color:#fff,stroke:#166534
+    style note1 fill:#450a0a,color:#fca5a5,stroke:#7f1d1d
+```
+
+---
+
+### 3. Diagrama de Secuencia UML — Ciclo de Vida Completo de una Consulta
+
+```mermaid
+sequenceDiagram
+    participant App as App Consumidora<br/>(HTTP Client)
+    participant GW as Servidor Central<br/>(API Gateway)
+    participant Cache as Caché en Memoria
+    participant Agent as Agente Local<br/>On-Premise
+    participant DB as Motor de Base<br/>de Datos Local
+
+    Note over Agent, GW: ── FASE 1: Establecimiento del Túnel ──
+
+    Agent->>GW: WebSocket CONNECT ws://servidor:3500/ws
+    Agent->>GW: type:"auth" { clienteId, secret, actions:[...] }
+    GW->>GW: Verifica secret contra agents.json
+    GW->>GW: Registra Action Manifest del agente
+    GW-->>Agent: type:"authResult" { ok: true }
+
+    Note over App, DB: ── FASE 2: Petición HTTP desde la App ──
+
+    App->>GW: POST /query/empresa_abc<br/>Header: X-Api-Key<br/>Body: { action:"get_clientes", params:{} }
+    GW->>GW: Verifica API Key → HTTP 401 si inválida
+    GW->>GW: Verifica agente conectado → HTTP 502 si ausente
+    GW->>GW: Valida action vs Action Manifest → HTTP 404 si no existe
+
+    Note over GW, Cache: ── FASE 3A: Cache HIT ──
+
+    GW->>Cache: GET "empresa_abc::get_clientes::{}"
+    Cache-->>GW: ✅ Datos encontrados (TTL vigente)
+    GW-->>App: HTTP 200 OK { ok:true, fromCache:true, data:[...] }
+
+    Note over GW, DB: ── FASE 3B: Cache MISS + Singleflight ──
+
+    GW->>Cache: GET "empresa_abc::get_clientes::{}"
+    Cache-->>GW: ❌ undefined (no existe o expiró)
+    GW->>GW: Crea flightPromise (Singleflight)<br/>Registra en mapa inflight[]
+    GW->>GW: correlationId = uuidv4()<br/>Almacena Promise en registry.pending
+    GW->>Agent: WebSocket type:"query"<br/>{ correlationId, action:"get_clientes", params:{} }
+
+    Note over Agent, DB: ── FASE 4: Resolución Local en el Agente ──
+
+    Agent->>Agent: Valida action en queries.json
+    Agent->>Agent: Sanitiza y tipifica parámetros
+    Agent->>DB: Ejecuta SELECT con driver (mssql/pg/mysql)
+    DB-->>Agent: Recordset con resultados
+    Agent->>Agent: audit.js → escribe log local<br/>[fecha] ACTION: get_clientes | STATUS: OK | ROWS: 1740
+
+    Note over Agent, GW: ── FASE 5: Retorno y Resolución ──
+
+    Agent-->>GW: WebSocket type:"queryResult"<br/>{ correlationId, data:{recordset:[...]} }
+    GW->>GW: registry.resolvePending(correlationId)<br/>Despierta Promise pausada
+    GW->>Cache: SET "empresa_abc::get_clientes::{}" TTL:60s
+    GW->>GW: inflight.delete(cacheKey)
+    GW-->>App: HTTP 200 OK { ok:true, fromCache:false, data:[...] }
+```
+
+---
+
+## 🎨 Diagrama de Conexión
+
+```mermaid
+sequenceDiagram
+    participant App as Aplicación Cliente
+    participant Server as Servidor Central (Cloud)
+    participant Agent as Agente On-Premise (Red Local)
+    participant DB as "Base de Datos (SQL Server/PG/MySQL)"
+
+    Note over Agent, Server: 1. Conexión WebSocket Reversa (Túnel)
+    Agent->>Server: Conecta WebSocket (Autenticado con ClientID + Secret)
+    
+    Note over App, Server: 2. Solicitud de Datos externa
+    App->>Server: POST /query/empresa_abc header{x-api-key:example-key} body{ action: "obtener_ventas", params: { anio: 2026 } } 
+    
+    Note over Server: 3. Chequeo de Caché (CACHE_DEFAULT_TTL > 0)
+    alt Cache HIT (Datos en memoria)
+        Server-->>App: Responde 200 OK con datos de caché (Latencia < 5ms)
+    else Cache MISS (Consultar al Agente)
+        Server->>Agent: Transmite acción "obtener_ventas" + params
+        Agent->>Agent: Valida tipos de parámetros & busca query SQL en queries.json
+        Agent->>DB: Ejecuta SELECT ... WHERE anio = 2026
+        DB-->>Agent: Devuelve set de datos
+        Agent->>Agent: Registra acceso en log de auditoría local
+        Agent-->>Server: Envía JSON de respuesta por WebSocket
+        Server->>Server: Almacena en caché (node-cache)
+        Server-->>App: Responde 200 OK con los datos
+    end
+```
+
+---
+
 ## ✨ Características Destacadas
 
 - 🔒 **Soberanía Absoluta del Dato:** Las sentencias SQL residen en el
