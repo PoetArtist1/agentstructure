@@ -119,40 +119,43 @@ graph TD
 ### 2. Topología de Red Virtualizada (Docker)
 
 ```mermaid
-graph TB
-    subgraph INTERNET ["🌐 Internet - Bridge de Docker"]
-        direction TB
-        INT["Adaptador Bridge\nDocker"]
+graph TD
+    subgraph HOST ["💻 Host / Entorno de Pruebas"]
+        JMETER["🔥 JMeter\n(Cliente de Carga)"]
     end
 
-    subgraph CLOUD ["☁️ Red cloud-net — 172.20.0.0/24"]
-        direction TB
-        SRV_C["📦 Contenedor\nServidor Central\n172.20.0.2\nPuerto 3500 expuesto\nHTTP / WebSocket"]
+    subgraph DOCKER_NET ["🐳 Red Docker — simulation-lab_default"]
+        
+        subgraph CLOUD ["☁️ Zona Nube (Simulada)"]
+            SRV["📦 Contenedor: sim-central-server\n(Servidor Central / API)\nPuerto 3500"]
+        end
+
+        subgraph ONPREMISE ["🏢 Zona On-Premise (Simulada)"]
+            AGT["📦 Contenedor: sim-local-agent\n(Agente Local)"]
+            DB["📦 Contenedor: sim-database\n(PostgreSQL)\nPuerto 5432"]
+        end
     end
 
-    subgraph ONPREMISE ["🏢 Red private-lan — 10.50.0.0/24 — Perimetro Aislado"]
-        direction TB
-        AGT_C["📦 Contenedor\nAgente Local\n10.50.0.5\nSin puertos entrantes"]
-        MSSQL["📦 SQL Server\n10.50.0.10:1433"]
-        PG["📦 PostgreSQL\n10.50.0.11:5432"]
-        MYSQL["📦 MySQL\n10.50.0.12:3306"]
-    end
+    %% 1. Conexión de control (Túnel WebSocket con flecha gruesa corregida)
+    AGT ==>|"1. Agente inicia y establece Túnel WebSocket Reverso (ws://server:3500)"| SRV
 
-    SRV_C <-->|"Puerto 3500 expuesto\nal exterior"| INT
-    AGT_C -->|"Egress unicamente\nTrafico WebSocket SALIENTE\nwss://servidor:3500/ws"| INT
+    %% 2. Flujo de datos de una consulta
+    JMETER -->|"2. POST /query"| SRV
+    SRV -->|"3. Envía payload de la query por el túnel WS"| AGT
+    AGT -->|"4. Ejecuta Query SQL localmente"| DB
+    DB -->|"5. Retorna resultados de la consulta"| AGT
+    AGT -->|"6. Devuelve resultados por el túnel WS"| SRV
+    SRV -->|"7. Responde JSON"| JMETER
 
-    AGT_C <-->|"Red interna privada"| MSSQL
-    AGT_C <-->|"Red interna privada"| PG
-    AGT_C <-->|"Red interna privada"| MYSQL
-
+    %% Estilos visuales
+    style DOCKER_NET fill:#111827,stroke:#374151,color:#fff
     style CLOUD fill:#0c2d48,stroke:#1e4d6b,color:#fff
     style ONPREMISE fill:#1a0a0a,stroke:#5c1a1a,color:#fff
-    style INTERNET fill:#1a1a2e,stroke:#16213e,color:#fff
-    style SRV_C fill:#065f46,color:#fff,stroke:#064e3b
-    style AGT_C fill:#7c2d12,color:#fff,stroke:#6b1d0f
-    style MSSQL fill:#312e81,color:#fff,stroke:#1e1b4b
-    style PG fill:#1e3a5f,color:#fff,stroke:#1e40af
-    style MYSQL fill:#14532d,color:#fff,stroke:#166534
+    style HOST fill:#1f2937,stroke:#4b5563,color:#fff
+    style SRV fill:#065f46,color:#fff,stroke:#064e3b
+    style AGT fill:#7c2d12,color:#fff,stroke:#6b1d0f
+    style DB fill:#1e3a5f,color:#fff,stroke:#1e40af
+    style JMETER fill:#4b5563,color:#fff,stroke:#374151
 ```
 
 ---
@@ -267,8 +270,9 @@ sequenceDiagram
   - **Microsoft SQL Server (MSSQL)**
 - 💻 **Instalador Interactivo:** Un asistente por consola rápido que guía la
   inicialización de ambos roles.
-- ⚡ **Caché en Memoria (Opcional):** Almacenamiento temporal integrado (`node-cache`) en el Servidor Central que previene la sobrecarga de consultas en el Agente y disminuye drásticamente la latencia en peticiones repetitivas.
-
+- ⚡ **Caché en Memoria (Opcional):** Almacenamiento temporal integrado
+  (`node-cache`) en el Servidor Central que previene la sobrecarga de consultas
+  en el Agente y disminuye drásticamente la latencia en peticiones repetitivas.
 
 ---
 
@@ -289,15 +293,18 @@ sequenceDiagram
 
 ## 🛠️ Instalación y Configuración
 
-El proyecto cuenta con un asistente interactivo por terminal que automatiza la creación de los archivos de configuración en Windows, macOS y Linux. 
+El proyecto cuenta con un asistente interactivo por terminal que automatiza la
+creación de los archivos de configuración en Windows, macOS y Linux.
 
-Sigue los pasos a continuación para instalar y configurar de forma precisa tanto el **Servidor Central** como el **Agente On-Premise**.
+Sigue los pasos a continuación para instalar y configurar de forma precisa tanto
+el **Servidor Central** como el **Agente On-Premise**.
 
 ---
 
 ### Paso 1: Clonar el Repositorio e Instalar Dependencias
 
-Clona el repositorio en la máquina donde vayas a trabajar e instala las dependencias base:
+Clona el repositorio en la máquina donde vayas a trabajar e instala las
+dependencias base:
 
 ```bash
 git clone https://github.com/PoetArtist1/agentstructure.git
@@ -305,18 +312,24 @@ cd agentstructure
 node install.js
 ```
 
-El script interactivo `install.js` te guiará para configurar los componentes. Si lo prefieres, también puedes hacer la configuración de forma manual copiando y renombrando los archivos de plantilla que se detallan a continuación.
+El script interactivo `install.js` te guiará para configurar los componentes. Si
+lo prefieres, también puedes hacer la configuración de forma manual copiando y
+renombrando los archivos de plantilla que se detallan a continuación.
 
 ---
 
 ### Paso 2: Configuración del Servidor Central (Cloud)
 
-El Servidor actúa como API Gateway y Hub de WebSockets. Requiere dos archivos principales en el directorio `/server`:
+El Servidor actúa como API Gateway y Hub de WebSockets. Requiere dos archivos
+principales en el directorio `/server`:
 
 #### 1. Archivo de Entorno: `server/.env`
-Crea este archivo copiando `server/.env.example`. Este define el comportamiento del servidor HTTP y la seguridad con la aplicación externa.
+
+Crea este archivo copiando `server/.env.example`. Este define el comportamiento
+del servidor HTTP y la seguridad con la aplicación externa.
 
 **Ejemplo de `server/.env`:**
+
 ```env
 # Puerto en el que escuchará el servidor (HTTP y WebSocket comparten el mismo puerto)
 PORT=3500
@@ -330,13 +343,15 @@ QUERY_TIMEOUT_MS=30000
 
 # Tiempo de vida en segundos de la caché en memoria (0 o vacío para desactivar)
 CACHE_DEFAULT_TTL=60
-
 ```
 
 #### 2. Registro de Agentes Autorizados: `server/agents.json`
-Crea este archivo copiando `server/agents.json.example`. En él se configuran las credenciales que usará cada agente para autenticarse por WebSocket.
+
+Crea este archivo copiando `server/agents.json.example`. En él se configuran las
+credenciales que usará cada agente para autenticarse por WebSocket.
 
 **Ejemplo de `server/agents.json`:**
+
 ```json
 {
   "empresa_ejemplo": {
@@ -349,20 +364,27 @@ Crea este archivo copiando `server/agents.json.example`. En él se configuran la
   }
 }
 ```
-* **Clave del Objeto (`empresa_ejemplo`, `sucursal_norte`)**: Corresponde al `clienteId` que usará el Agente para presentarse.
-* **`secret`**: Contraseña secreta para validar la conexión del túnel WebSocket.
-* **`description`**: Información descriptiva e interna del agente.
+
+- **Clave del Objeto (`empresa_ejemplo`, `sucursal_norte`)**: Corresponde al
+  `clienteId` que usará el Agente para presentarse.
+- **`secret`**: Contraseña secreta para validar la conexión del túnel WebSocket.
+- **`description`**: Información descriptiva e interna del agente.
 
 ---
 
 ### Paso 3: Configuración del Agente On-Premise
 
-El Agente reside dentro de la red privada de tu base de datos. Requiere dos archivos en el directorio `/agent`:
+El Agente reside dentro de la red privada de tu base de datos. Requiere dos
+archivos en el directorio `/agent`:
 
 #### 1. Archivo de Configuración: `agent/config.json`
-Crea este archivo copiando `agent/config.json.example`. Contiene la URL del servidor, las credenciales del túnel y la cadena de conexión local de la base de datos.
+
+Crea este archivo copiando `agent/config.json.example`. Contiene la URL del
+servidor, las credenciales del túnel y la cadena de conexión local de la base de
+datos.
 
 **Ejemplo de `agent/config.json`:**
+
 ```json
 {
   "serverUrl": "ws://localhost:3500/ws",
@@ -392,17 +414,30 @@ Crea este archivo copiando `agent/config.json.example`. Contiene la URL del serv
   }
 }
 ```
+
 ##### Parámetros clave a configurar:
-* **`serverUrl`**: Dirección IP/Dominio y puerto del Servidor Central. Debe usar el protocolo `ws://` (desarrollo) o `wss://` (producción con certificado SSL).
-* **`clienteId`**: Identificador único que coincide con el registrado en el servidor (`agents.json`).
-* **`secret`**: Contraseña de WebSocket que coincide con la registrada en el servidor (`agents.json`).
-* **`dbEngine`**: Motor de base de datos a conectar. Opciones válidas: `"mssql"`, `"postgres"`, `"mysql"`.
-* **`db`**: Credenciales de acceso del motor de base de datos. El objeto de configuración varía según el motor (`dbEngine`). El ejemplo superior muestra la estructura típica para Microsoft SQL Server (`mssql`).
+
+- **`serverUrl`**: Dirección IP/Dominio y puerto del Servidor Central. Debe usar
+  el protocolo `ws://` (desarrollo) o `wss://` (producción con certificado SSL).
+- **`clienteId`**: Identificador único que coincide con el registrado en el
+  servidor (`agents.json`).
+- **`secret`**: Contraseña de WebSocket que coincide con la registrada en el
+  servidor (`agents.json`).
+- **`dbEngine`**: Motor de base de datos a conectar. Opciones válidas:
+  `"mssql"`, `"postgres"`, `"mysql"`.
+- **`db`**: Credenciales de acceso del motor de base de datos. El objeto de
+  configuración varía según el motor (`dbEngine`). El ejemplo superior muestra
+  la estructura típica para Microsoft SQL Server (`mssql`).
 
 #### 2. Lista Blanca de Consultas: `agent/queries.json`
-Este archivo contiene la lógica de base de datos y actúa como barrera de seguridad de red. Aquí defines las consultas SQL que la aplicación externa puede invocar. **El servidor web externo nunca puede enviar SQL arbitrario; solo puede solicitar la clave de una acción configurada en este archivo.**
+
+Este archivo contiene la lógica de base de datos y actúa como barrera de
+seguridad de red. Aquí defines las consultas SQL que la aplicación externa puede
+invocar. **El servidor web externo nunca puede enviar SQL arbitrario; solo puede
+solicitar la clave de una acción configurada en este archivo.**
 
 **Ejemplo de `agent/queries.json`:**
+
 ```json
 {
   "get_cuentas_cobrar_by_client": {
@@ -419,38 +454,57 @@ Este archivo contiene la lógica de base de datos y actúa como barrera de segur
   }
 }
 ```
-* **Variables parametrizadas (`@IdCliente`)**: Utiliza variables anteponiendo `@` para enlazarlas de forma segura y evitar ataques de inyección SQL. El Agente mapeará y sanitizará los parámetros antes de pasarlos al motor de base de datos.
-* **Tipos de datos soportados para parámetros**: `int`, `string`, `float`, `decimal`, `boolean`, `date`, `datetime`.
+
+- **Variables parametrizadas (`@IdCliente`)**: Utiliza variables anteponiendo
+  `@` para enlazarlas de forma segura y evitar ataques de inyección SQL. El
+  Agente mapeará y sanitizará los parámetros antes de pasarlos al motor de base
+  de datos.
+- **Tipos de datos soportados para parámetros**: `int`, `string`, `float`,
+  `decimal`, `boolean`, `date`, `datetime`.
 
 ---
 
 ### Paso 4: Ejecución en Producción / Desarrollo
 
-Una vez configurados los archivos, puedes iniciar los servicios de la siguiente manera:
+Una vez configurados los archivos, puedes iniciar los servicios de la siguiente
+manera:
 
 #### Ejecutar el Servidor Central:
+
 ```bash
 cd server
 npm install
 npm start
 ```
-*(El servidor comenzará a escuchar peticiones HTTP y WebSocket en el puerto configurado).*
+
+_(El servidor comenzará a escuchar peticiones HTTP y WebSocket en el puerto
+configurado)._
 
 #### Ejecutar el Agente:
+
 ```bash
 cd agent
 npm install
 npm start
 ```
-*(El agente establecerá la conexión inversa por WebSocket con el servidor y quedará a la espera de consultas).*
+
+_(El agente establecerá la conexión inversa por WebSocket con el servidor y
+quedará a la espera de consultas)._
 
 ---
 
 ## ⚡ Caché en Memoria y Rendimiento
 
-El Servidor Central incorpora una capa de almacenamiento en memoria (`node-cache`) que reduce la latencia de red y evita la sobrecarga transaccional de tus servidores On-Premise:
+El Servidor Central incorpora una capa de almacenamiento en memoria
+(`node-cache`) que reduce la latencia de red y evita la sobrecarga transaccional
+de tus servidores On-Premise:
 
-*   **Activación:** Se controla a nivel global con la variable `CACHE_DEFAULT_TTL` (en segundos) en el archivo `server/.env`.
-*   **Comportamiento:** Si llega una solicitud HTTP idéntica (mismo `clienteId`, misma acción y mismos parámetros), el Servidor Central devuelve el resultado directamente desde su memoria RAM (*Cache HIT*) sin enviar mensajes por WebSocket al agente ni consultar la base de datos local.
-*   **Limpieza de memoria:** Transcurrido el tiempo asignado en el TTL, la entrada en caché expira y se elimina automáticamente, forzando a que la siguiente consulta busque datos actualizados directamente del agente.
-
+- **Activación:** Se controla a nivel global con la variable `CACHE_DEFAULT_TTL`
+  (en segundos) en el archivo `server/.env`.
+- **Comportamiento:** Si llega una solicitud HTTP idéntica (mismo `clienteId`,
+  misma acción y mismos parámetros), el Servidor Central devuelve el resultado
+  directamente desde su memoria RAM (_Cache HIT_) sin enviar mensajes por
+  WebSocket al agente ni consultar la base de datos local.
+- **Limpieza de memoria:** Transcurrido el tiempo asignado en el TTL, la entrada
+  en caché expira y se elimina automáticamente, forzando a que la siguiente
+  consulta busque datos actualizados directamente del agente.
