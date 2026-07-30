@@ -138,6 +138,10 @@ este repositorio.
     variables deterministas (clienteId, acción y parámetros ordenados).
   - Al haber un impacto positivo de caché (_Cache Hit_), se descarta el tráfico
     por el túnel WebSocket, devolviendo la respuesta desde la memoria RAM.
+  - La caché tiene un límite de 1000 entradas simultáneas (`maxKeys: 1000`) para
+    proteger la RAM del servidor contra crecimiento descontrolado (OOM).
+  - Las respuestas que superen 1 MB no se almacenan en caché para evitar que un
+    payload masivo sature el heap de Node.js.
 - **Componente Implementado:** `server/lib/cache.js` (Uso de la librería
   `node-cache`)
 
@@ -155,3 +159,34 @@ este repositorio.
     (.env, agents.json, config.json) y ejecuta el aprovisionamiento de
     dependencias.
 - **Componente Implementado:** `install.js` en la raíz del proyecto
+
+### [Media] HU-11: Compresión de Datos en Tránsito (GZIP + Deflate)
+
+- **Como** administrador de infraestructura en la nube,
+- **Quiero** que todas las respuestas HTTP y los mensajes WebSocket se compriman
+  automáticamente antes de transmitirse por la red,
+- **Para** reducir el consumo de ancho de banda en ~90% y proteger la velocidad
+  de subida (upload) de la red local del Agente On-Premise.
+- **Criterios de Aceptación:**
+  - El Servidor Central utiliza el middleware `compression` de Express para
+    comprimir automáticamente todas las respuestas HTTP con GZIP.
+  - Los mensajes WebSocket entre el Servidor y el Agente se comprimen usando la
+    extensión nativa `perMessageDeflate` del protocolo WebSocket (RFC 7692).
+- **Componente Implementado:** `server/index.js` (middleware `compression` y
+  opción `perMessageDeflate` en `WebSocketServer`), `agent/index.js` (opción
+  `perMessageDeflate` en cliente WebSocket)
+
+### [Media] HU-12: Paginación Nativa de Consultas
+
+- **Como** desarrollador de aplicaciones consumidoras,
+- **Quiero** poder solicitar datos en páginas de tamaño configurable en lugar de
+  recibir todos los registros de golpe,
+- **Para** evitar saturar la red, la RAM y el CPU tanto del Agente como del
+  Servidor Central al consultar tablas con miles de registros.
+- **Criterios de Aceptación:**
+  - El `queries.json` del Agente soporta la definición de consultas paginadas
+    usando parámetros tipificados `@Offset` (tipo `int`) y `@Limit` (tipo `int`).
+  - Se incluye un ejemplo funcional de paginación para SQL Server usando la
+    sintaxis `OFFSET @Offset ROWS FETCH NEXT @Limit ROWS ONLY`.
+- **Componente Implementado:** `agent/queries.json` (acción
+  `get_clientes_paginados`)

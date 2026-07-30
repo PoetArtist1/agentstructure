@@ -37,5 +37,14 @@
     "description": "Obtiene todas las monedas configuradas en el sistema con su símbolo y tasa de cambio actual",
     "sql": "SELECT Codigo as IDMoneda, Descripcion as nombre_moneda, Simbol as simbolo_moneda, ParaVenta as tasa_cambio FROM Monedas",
     "params": {}
+  },
+
+  "get_clientes_paginados": {
+    "description": "Obtiene clientes paginados usando OFFSET/FETCH (SQL Server). Enviar Offset=0 y Limit=100 para la primera página, Offset=100 y Limit=100 para la segunda, etc.",
+    "sql": "SELECT Codigo as IDCliente, Descripcion as razon_social, Direccion1 as direccion, Telefonos as telefono, IdVendedor as IDVendedor, TipoPrecio as tipo_precio, Rif as rif, PermiteCredito as tiene_credito, LimiteCredito as limite_credito, DiasCredito as dias_credito, Contact as contacto, Email as email FROM Clientes ORDER BY Codigo OFFSET @Offset ROWS FETCH NEXT @Limit ROWS ONLY",
+    "params": {
+      "Offset": { "type": "int", "required": true },
+      "Limit": { "type": "int", "required": true }
+    }
   }
 }

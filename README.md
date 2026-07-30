@@ -273,6 +273,12 @@ sequenceDiagram
 - ⚡ **Caché en Memoria (Opcional):** Almacenamiento temporal integrado
   (`node-cache`) en el Servidor Central que previene la sobrecarga de consultas
   en el Agente y disminuye drásticamente la latencia en peticiones repetitivas.
+- 📦 **Compresión GZIP y WebSocket Deflate:** Las respuestas HTTP se comprimen
+  automáticamente con GZIP (~90% de reducción) y los mensajes WebSocket usan
+  `perMessageDeflate` para minimizar el tráfico entre el Servidor y el Agente.
+- 📄 **Paginación Nativa:** Soporte integrado para consultas paginadas con
+  `OFFSET`/`FETCH` (SQL Server), `LIMIT`/`OFFSET` (PostgreSQL/MySQL), evitando
+  la transferencia de grandes volúmenes de datos en un solo paquete.
 
 ---
 
@@ -451,6 +457,14 @@ solicitar la clave de una acción configurada en este archivo.**
     "description": "Obtiene todos los bancos registrados",
     "sql": "SELECT idbanco, Descripcion as banco FROM fBancos",
     "params": {}
+  },
+  "get_clientes_paginados": {
+    "description": "Obtiene clientes paginados de 100 en 100 usando OFFSET/FETCH (SQL Server)",
+    "sql": "SELECT Codigo as IDCliente, Descripcion as razon_social, Rif as rif FROM Clientes ORDER BY Codigo OFFSET @Offset ROWS FETCH NEXT @Limit ROWS ONLY",
+    "params": {
+      "Offset": { "type": "int", "required": true },
+      "Limit": { "type": "int", "required": true }
+    }
   }
 }
 ```
@@ -461,6 +475,10 @@ solicitar la clave de una acción configurada en este archivo.**
   de datos.
 - **Tipos de datos soportados para parámetros**: `int`, `string`, `float`,
   `decimal`, `boolean`, `date`, `datetime`.
+- **Paginación:** Para consultas con grandes volúmenes de datos (más de 500
+  registros), se recomienda usar `OFFSET`/`FETCH` (SQL Server) o
+  `LIMIT`/`OFFSET` (PostgreSQL/MySQL). La App externa solicita las páginas
+  secuencialmente pasando los parámetros `Offset` y `Limit`.
 
 ---
 
@@ -493,11 +511,13 @@ quedará a la espera de consultas)._
 
 ---
 
-## ⚡ Caché en Memoria y Rendimiento
+## ⚡ Rendimiento y Optimización
 
-El Servidor Central incorpora una capa de almacenamiento en memoria
-(`node-cache`) que reduce la latencia de red y evita la sobrecarga transaccional
-de tus servidores On-Premise:
+El Servidor Central incorpora múltiples capas de optimización para soportar alta
+concurrencia (40+ clientes, 2000+ usuarios simultáneos) sin degradar el
+rendimiento:
+
+### Caché en Memoria (`node-cache`)
 
 - **Activación:** Se controla a nivel global con la variable `CACHE_DEFAULT_TTL`
   (en segundos) en el archivo `server/.env`.
@@ -508,3 +528,38 @@ de tus servidores On-Premise:
 - **Limpieza de memoria:** Transcurrido el tiempo asignado en el TTL, la entrada
   en caché expira y se elimina automáticamente, forzando a que la siguiente
   consulta busque datos actualizados directamente del agente.
+- **Protección de RAM (maxKeys):** La caché tiene un límite de 1000 entradas
+  simultáneas. Al alcanzar el límite, se rechazan nuevas inserciones para evitar
+  crecimiento descontrolado de memoria (OOM).
+- **Protección de Payload (1 MB):** Las respuestas que superen 1 MB no se
+  almacenan en caché. Se sirven directamente al cliente HTTP sin retener datos
+  masivos en la memoria RAM del servidor.
+
+### Compresión GZIP (HTTP) y Deflate (WebSocket)
+
+- **GZIP HTTP:** Todas las respuestas HTTP del Servidor Central se comprimen
+  automáticamente con GZIP mediante el middleware `compression`. Esto reduce el
+  tamaño de transferencia en ~90% (ej. un JSON de 2 MB se transmite como ~150 KB).
+- **perMessageDeflate (WebSocket):** Los mensajes intercambiados entre el
+  Servidor Central y el Agente por el túnel WebSocket se comprimen en binario
+  usando la extensión nativa `perMessageDeflate` del protocolo WebSocket (RFC 7692).
+  Esto protege la velocidad de subida (upload) de la red local del Agente.
+
+### Paginación de Consultas
+
+Para consultas que devuelven grandes volúmenes de datos (1500+ registros), se
+recomienda encarecidamente utilizar **paginación** en las definiciones de
+`agent/queries.json`. Esto evita saturar la red, la RAM y el CPU tanto del
+Agente como del Servidor Central.
+
+**Ejemplo de petición paginada:**
+```json
+POST /query/empresa_abc
+{
+  "action": "get_clientes_paginados",
+  "params": { "Offset": 0, "Limit": 100 }
+}
+```
+La App solicita 100 registros por página. Al hacer scroll o clic en "Siguiente",
+envía `Offset: 100`, luego `Offset: 200`, etc. Cada respuesta pesa apenas unos
+KB y la caché almacena cada página de forma independiente.

@@ -349,7 +349,9 @@ Implementa una caché en memoria RAM usando la librería `node-cache` para evita
 - Los parámetros se ordenan alfabéticamente antes de serializar, para que `{a:1, b:2}` y `{b:2, a:1}` generen la misma llave.
 - El TTL (Time-To-Live) se configura con la variable de entorno `CACHE_DEFAULT_TTL` (en segundos). Por defecto es 0 (sin caché).
 - `node-cache` barre y elimina entradas expiradas automáticamente cada 60 segundos.
-- La caché se almacena por referencia (useClones: false) para mejor rendimiento.
+- La caché se almacena por referencia (`useClones: false`) para mejor rendimiento.
+- Límite máximo de 1000 entradas simultáneas (`maxKeys: 1000`) para proteger la memoria RAM del servidor contra crecimiento descontrolado (OOM).
+- Protección de payload: las respuestas que superen 1 MB no se almacenan en caché para evitar que un único resultado masivo sature el heap de Node.js.
 - Incluye función de invalidación por cliente para limpiar la caché cuando es necesario.
 
 #### 5.1.3 Archivos de Configuración del Servidor
@@ -388,11 +390,12 @@ QUERY_TIMEOUT_MS=30000
 | Librería | Versión | Propósito |
 |----------|---------|-----------|
 | `express` | ^4.21.2 | Framework HTTP para la API REST |
-| `ws` | ^8.18.1 | Servidor WebSocket (RFC 6455) |
+| `compression` | ^1.8.0 | Compresión GZIP de respuestas HTTP (~90% de reducción) |
+| `ws` | ^8.18.1 | Servidor WebSocket (RFC 6455) con `perMessageDeflate` |
 | `dotenv` | ^16.4.7 | Cargar variables de entorno desde .env |
 | `cors` | ^2.8.5 | Permitir peticiones cross-origin |
 | `helmet` | ^8.0.0 | Cabeceras de seguridad HTTP |
-| `node-cache` | ^5.1.2 | Caché en memoria RAM |
+| `node-cache` | ^5.1.2 | Caché en memoria RAM (maxKeys: 1000, protección 1 MB) |
 | `uuid` | ^11.1.0 | Generación de UUIDs v4 para correlación |
 
 ---
@@ -943,11 +946,12 @@ Si `CACHE_DEFAULT_TTL > 0`, guarda el resultado con la llave `"empresa_abc::get_
 | Tecnología | Versión | Uso |
 |------------|---------|-----|
 | **Express.js** | ^4.21.2 | Framework web para API REST |
-| **ws** | ^8.18.1 | Implementación de WebSocket para Node.js (RFC 6455) |
+| **compression** | ^1.8.0 | Compresión GZIP de respuestas HTTP (~90% de reducción) |
+| **ws** | ^8.18.1 | Implementación de WebSocket para Node.js (RFC 6455) con `perMessageDeflate` |
 | **dotenv** | ^16.4.7 | Gestión de variables de entorno |
 | **cors** | ^2.8.5 | Middleware de Cross-Origin Resource Sharing |
 | **helmet** | ^8.0.0 | Cabeceras de seguridad HTTP |
-| **node-cache** | ^5.1.2 | Almacenamiento en caché en memoria |
+| **node-cache** | ^5.1.2 | Almacenamiento en caché en memoria (maxKeys: 1000, protección 1 MB) |
 | **uuid** | ^11.1.0 | Generación de UUIDs v4 |
 
 ### 9.3 Agente On-Premise
@@ -1100,6 +1104,8 @@ Si 50 usuarios piden exactamente los mismos datos en un corto período, el agent
 - TTL configurable por variable de entorno (`CACHE_DEFAULT_TTL` en segundos).
 - Limpieza automática de entradas expiradas cada 60 segundos.
 - Invalidación por cliente: puede limpiar toda la caché de un clienteId específico.
+- Límite máximo de 1000 entradas (`maxKeys: 1000`) para evitar crecimiento descontrolado de memoria (OOM).
+- Protección de payload: las respuestas que superen 1 MB (~1,048,576 bytes) no se almacenan en caché para evitar que un solo resultado masivo sature la RAM del proceso Node.js.
 
 ### 13.3 Limitaciones
 - La caché es por proceso. Si el servidor se reinicia, se pierde.
@@ -1108,7 +1114,29 @@ Si 50 usuarios piden exactamente los mismos datos en un corto período, el agent
 
 ---
 
-## 14. SOPORTE MULTI-MOTOR DE BASE DE DATOS
+## 14. COMPRESIÓN Y OPTIMIZACIÓN DE TRANSFERENCIA
+
+### 14.1 Compresión GZIP (Capa HTTP)
+El Servidor Central utiliza el middleware `compression` de Express para comprimir automáticamente todas las respuestas HTTP con GZIP. Esto reduce el tamaño de transferencia en aproximadamente un 90% (ej. un JSON de 2 MB se transmite como ~150 KB), mejorando drásticamente la experiencia del usuario final.
+
+### 14.2 Compresión Deflate (Capa WebSocket)
+Los mensajes intercambiados entre el Servidor Central y el Agente On-Premise por el túnel WebSocket se comprimen en binario usando la extensión nativa `perMessageDeflate` del protocolo WebSocket (RFC 7692). Esto protege la velocidad de subida (upload) de la red local del Agente, reduciendo el peso de los datos transmitidos por el túnel en ~90%.
+
+### 14.3 Paginación de Consultas
+Para consultas que devuelven grandes volúmenes de datos (1500+ registros), se recomienda utilizar paginación en las definiciones de `agent/queries.json` usando `OFFSET`/`FETCH` (SQL Server) o `LIMIT`/`OFFSET` (PostgreSQL/MySQL). Esto evita saturar la red, la RAM y el CPU tanto del Agente como del Servidor Central. Cada página se cachea de forma independiente, manteniendo la latencia ultra baja en peticiones repetitivas.
+
+**Ejemplo de petición paginada:**
+```json
+POST /query/empresa_abc
+{
+  "action": "get_clientes_paginados",
+  "params": { "Offset": 0, "Limit": 100 }
+}
+```
+
+---
+
+## 15. SOPORTE MULTI-MOTOR DE BASE DE DATOS
 
 ### 14.1 Motores Soportados
 

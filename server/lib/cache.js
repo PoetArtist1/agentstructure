@@ -23,13 +23,20 @@ const NodeCache = require('node-cache');
 // ─── Instancia del caché ──────────────────────────────────────────────────────
 // checkperiod: cada cuántos segundos node-cache barre y elimina las entradas expiradas.
 // useClones: false es más rápido. Los datos se devuelven por referencia, no por copia.
+// maxKeys: límite máximo de entradas almacenadas para evitar crecimiento descontrolado de RAM.
 const cache = new NodeCache({
   checkperiod: 60,    // Limpieza de entradas expiradas cada 60 segundos
   useClones: false,   // Mejor rendimiento: no clona los objetos al leer/escribir
+  maxKeys: 1000,      // Máximo 1000 entradas en caché (protección contra OOM)
 });
 
 // TTL por defecto en segundos (configurable desde .env, default: sin caché)
 const DEFAULT_TTL = parseInt(process.env.CACHE_DEFAULT_TTL, 10) || 0;
+
+// Tamaño máximo permitido para almacenar una respuesta en caché (en bytes).
+// Las respuestas que superen este límite se sirven directamente sin cachear,
+// evitando que un único payload masivo sature la RAM del proceso Node.js.
+const MAX_CACHE_VALUE_BYTES = 1 * 1024 * 1024; // 1 MB
 
 // ─── Generar llave de caché ───────────────────────────────────────────────────
 /**
@@ -71,6 +78,8 @@ function get(clienteId, action, params) {
 
 /**
  * Guarda un valor en la caché con un tiempo de vida (TTL).
+ * Si el payload supera MAX_CACHE_VALUE_BYTES (~1 MB), se omite silenciosamente
+ * para proteger la RAM del servidor bajo carga concurrente alta.
  *
  * @param {string} clienteId  - El ID del cliente
  * @param {string} action     - El nombre de la acción
@@ -82,6 +91,21 @@ function get(clienteId, action, params) {
 function set(clienteId, action, params, value, ttlSeconds) {
   const ttl = ttlSeconds || DEFAULT_TTL;
   if (ttl <= 0) return; // Si el TTL es 0, no cacheamos nada
+
+  // ── Protección de RAM: no cachear payloads gigantes ──
+  // Estimamos el tamaño del valor serializándolo a JSON.
+  // Si supera 1 MB, lo descartamos para evitar saturar el heap de Node.js.
+  try {
+    const estimatedSize = JSON.stringify(value).length;
+    if (estimatedSize > MAX_CACHE_VALUE_BYTES) {
+      console.log(`[Cache] SKIP: Payload demasiado grande (${(estimatedSize / 1024).toFixed(0)} KB). No se almacenará en caché.`);
+      return;
+    }
+  } catch {
+    // Si no se puede serializar, no cacheamos
+    return;
+  }
+
   const key = buildKey(clienteId, action, params);
   cache.set(key, value, ttl);
 }

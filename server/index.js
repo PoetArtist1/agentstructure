@@ -28,10 +28,11 @@
 require('dotenv').config();
 
 // Módulos nativos y de terceros necesarios
-const http = require('http');     // Para crear el servidor HTTP base
-const express = require('express'); // Framework para la API REST
-const cors = require('cors');      // Middleware para permitir peticiones cross-origin
-const helmet = require('helmet');  // Middleware de seguridad (cabeceras HTTP protectoras)
+const http = require('http');        // Para crear el servidor HTTP base
+const express = require('express');  // Framework para la API REST
+const compression = require('compression'); // Compresión GZIP para respuestas HTTP
+const cors = require('cors');        // Middleware para permitir peticiones cross-origin
+const helmet = require('helmet');    // Middleware de seguridad (cabeceras HTTP protectoras)
 const { WebSocketServer } = require('ws'); // Librería para el servidor WebSocket
 
 // Importa nuestras rutas, middlewares y manejadores personalizados
@@ -48,6 +49,7 @@ const PORT = parseInt(process.env.PORT, 10) || 3500;
 const app = express();
 
 // ─── Middlewares Globales ────────────────────────────────────────────────────
+app.use(compression());    // Compresión GZIP: reduce el tamaño de las respuestas HTTP ~90%
 app.use(helmet());         // Protege la app configurando varios headers HTTP de seguridad
 app.use(cors());           // Permite peticiones desde cualquier origen (útil para Apps móviles/web)
 app.use(express.json());   // Parsea los cuerpos de las peticiones que vienen en formato JSON
@@ -88,6 +90,7 @@ const wss = new WebSocketServer({
   server,                          // Reutiliza el servidor de Express
   path: '/ws',                     // Ruta específica para los WebSockets
   maxPayload: 10 * 1024 * 1024,   // 10 MB máximo por mensaje (para soportar resultados grandes)
+  perMessageDeflate: true,         // Compresión binaria por mensaje (reduce ~90% el tráfico WS)
 });
 
 // Inicializa la lógica para manejar las conexiones de los agentes
